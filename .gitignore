@@ -1,0 +1,6 @@
+# gitignore for AVR_KERNEL
+
+Debug
+Release
+*.cproj
+*.rar
