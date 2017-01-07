@@ -24,6 +24,15 @@ unsigned char buf_uart_rx[c_UART_RXBUFLEN];
 
 char UART_CLR[] = {27, '[','H', 27, '[', '2', 'J',0};
 char UART_NL[] = {0x0d,0x0a,0};
+	
+void f_uart_flush() {
+  p_uart_txin = p_uart_txout = buf_uart_tx;
+	p_uart_rxin = p_uart_rxout = buf_uart_rx;
+
+	v_uart_txbuf_count = 0;
+	v_uart_rxbuf_count = 0;
+
+}
 
 void f_config_uart(void) {
 	
@@ -34,11 +43,7 @@ void f_config_uart(void) {
 	UCSR0B = (1<<RXCIE0) | (1<<UDRIE0)| (1<<RXEN0) | (1<<TXEN0);
 	UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);
 
-	p_uart_txin = p_uart_txout = buf_uart_tx;
-	p_uart_rxin = p_uart_rxout = buf_uart_rx;
-
-	v_uart_txbuf_count = 0;
-	v_uart_rxbuf_count = 0;
+  f_uart_flush();
 
 }
 
