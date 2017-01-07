@@ -65,6 +65,8 @@ unsigned char __attribute__((progmem)) lut_dbgcmd[] = {
 	'R', 'W', 'B', 'C', '1', '2', '3', '4', 'I', 'P', 'd', 'D', 'A', '*'
 };	
 
+boolean v_use_lcd;
+
 /*** Hex to Bin ***/
 
 unsigned short f_HexBin(char *hex_in)
@@ -130,22 +132,21 @@ void (*fp_lut_dbgfunc[c_DEBUG_AVAILCMD])(void) = {
 	f_debug_disable				//'*'
 };
 
-void f_PrintOutput(char str[])
-{
-	f_lcd_set_cursor(1, 0);
-	f_lcd_put_str(str);
-}
-
-void f_init_dbg(void) {
+void f_init_dbg(boolean use_lcd) {
 	
+	v_use_lcd = !!use_lcd;
 	v_debugcount = 0;
+	v_sys_state |= bm_DBGEN;
+	
 	f_uart_put_str("Debugger initialized");
 	f_uart_new_line();
 	f_uart_put_str("Debugger running now");
 	f_uart_new_line();
 	f_uart_put_str("? ");
-	f_lcd_put_str("? ");
-	v_sys_state |= bm_DBGEN;
+	
+	if (v_use_lcd == TRUE) {
+	  f_lcd_put_str("? ");
+	}	  
 }
 
 void f_debugger(void) {
@@ -163,8 +164,11 @@ void f_debugger(void) {
 				f_uart_new_line();
 				f_uart_put_str("Debugger enabled!");
 				f_uart_new_line();
-				f_uart_put_str("? ");
-				f_lcd_put_str("? ");
+				f_uart_put_str("? ");\
+
+				if (v_use_lcd == TRUE) {
+				  f_lcd_put_str("? ");
+				}				  
 			}
 			return;
 		}		
@@ -177,21 +181,31 @@ void f_debugger(void) {
 			v_debugcount = 0;
 			f_uart_put_str("Error");
 			f_uart_new_line();
-			f_uart_put_str("? ");	
-			f_lcd_clear();
-			f_lcd_put_str("? ");
+			f_uart_put_str("? ");
+
+	    if (v_use_lcd == TRUE) {
+			    f_lcd_clear();
+			    f_lcd_put_str("? ");
+		  }				
 		}
 		else {
 			f_uart_put_char(c);
-			f_lcd_put_char(c);
+			
+			if (v_use_lcd == TRUE) {
+			  f_lcd_put_char(c);
+			}
+						  
 			if(c == c_ENTER) {
 				f_debug_process_cmd();
 				if((v_sys_state & bm_DBGEN) == 0) {
 					return;
 				}					
 				f_uart_put_str("? ");
-				f_lcd_clear();
-				f_lcd_put_str("? ");
+
+      	if (v_use_lcd == TRUE) {
+				  f_lcd_clear();
+				  f_lcd_put_str("? ");
+		    }				  
 			}
 		}			
 	}
@@ -218,7 +232,6 @@ void f_debug_port(unsigned char data) {
 	f_BinHex(data, str);
 	f_uart_put_str(str);
 	f_uart_new_line();
-	f_PrintOutput(str);
 }
 
 void f_debug_port_v(unsigned char data) {
@@ -367,11 +380,13 @@ void f_debug_wPROMbyte (void) {
 
 void f_debug_disable(void)
 {
-
 	v_sys_state &= ~bm_DBGEN;
+	
 	f_uart_put_str("Debugger disabled!");
 	f_uart_new_line();
-	f_lcd_clear();
+	if (v_use_lcd == TRUE) {
+	  f_lcd_clear();
+	}	  
 }
 
 void f_debug_wPORT(void)

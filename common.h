@@ -11,6 +11,7 @@
 
 /*
  * Common declarations.
+ * Routines and variables which are used in all modules.
  */
 
 /* !!! IMPORTANT !!! always define F_CPU before including any AVR headers */

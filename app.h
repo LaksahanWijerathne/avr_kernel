@@ -13,6 +13,9 @@
 #include "utility.h"
 #include "kernel.h"
 
+#define c_APP_TICKS			      10		// 10ms AppTick
+#define c_APP_TIMERID		      3
+
 void f_init_app(void);
 
 void f_run_app(void);

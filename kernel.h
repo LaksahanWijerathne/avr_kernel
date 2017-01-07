@@ -12,13 +12,16 @@
 
 #include "common.h"
 
-#define F_CPU		16000000UL
+/*
+ * TODO have config.h file to put
+ *      all config info
+ */
 
-/*** Settings ***/
-#define CPU_FAMILY	AVR
-#define CPU_NAME	ATMEGA328P
+/*** Config data ***/
+#define MCU_FAMILY	  "AVR"
+#define MCU_NAME	    "ATMEGA328P"
+
 #define ADC_PORT	PORTA
-
 
 /*** Constants ***/
 #define c_SYS_TIMEMAX	  	    0xFFFE
@@ -28,9 +31,6 @@
 #define c_SYS_SWTIMERID2	    2
 #define c_SYS_SWTIMERID3	    3
 
-#define c_APP_TICKS			      10		// 10ms AppTick
-#define c_APP_TIMERID		      3
-
 #define c_DEBUG_AVAILCMD	    14
 #define c_DEBUG_BUFLEN		    128
 
@@ -38,19 +38,21 @@
 
 /*** Bit values ***/
 #define bv_SYSTICK			0
-#define bv_APPTICK			1
-#define bv_DBGEN		  	2
+#define bv_APP1TICK			1
+#define bv_APP2TICK			2
+#define bv_DBGEN		  	3
 
 /*** Bitmask ***/
 #define bm_SYSTICK			(1<<bv_SYSTICK)
-#define bm_APPTICK			(1<<bv_APPTICK)
-#define bm_DBGEN	  	(1<<bv_DBGEN)
+#define bm_APP2TICK			(1<<bv_APP1TICK)
+#define bm_APP2TICK			(1<<bv_APP2TICK)
+#define bm_DBGEN	    	(1<<bv_DBGEN)
 
 
 void SIG_OUTPUT_COMPARE1A( void ) __attribute__ ( ( signal ) );
 
 void f_init_systick_timer(unsigned short duration);
 
-void f_kernel(void);
+void f_kernel_tick(void);
 
 #endif /* KERNEL_H_ */

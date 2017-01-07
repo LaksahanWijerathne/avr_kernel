@@ -8,6 +8,7 @@
 
 #include "kernel.h"
 #include "lcd.h"
+#include "app.h"
 
 /*** Settings ***/
 #define APP_SWITCH_PIN		2
@@ -46,10 +47,10 @@ ISR(TIMER1_COMPA_vect) {
 
 void f_init_systick_timer(unsigned short duration) { 
 	
-  TCCR1A = (0<<COM1A1)| (0<<COM1A0) |			//normal operation for com1a 
-			     (0<<COM1B1)| (0<<COM1B0) |			//normal operation for channel b 
-           (0<<FOC1A) | (0<<FOC1B)  |			//channel a and b output disabled 
-			     (0<<WGM11) | (0<<WGM10);		  	//wgm13..0=0b0100, CTC mode 
+  TCCR1A = (0<<COM1A1)| (0<<COM1A0) |     //normal operation for com1a 
+           (0<<COM1B1)| (0<<COM1B0) |     //normal operation for channel b 
+           (0<<FOC1A) | (0<<FOC1B)  |     //channel a and b output disabled 
+		       (0<<WGM11) | (0<<WGM10);		  	//wgm13..0=0b0100, CTC mode 
 	
 	TCCR1B = (0<<ICNC1)|					                  //input capture noise canceler: disabled 
 			     (0<<ICES1)|					                  //input capture edge select: falling edge 
@@ -60,9 +61,12 @@ void f_init_systick_timer(unsigned short duration) {
 	TCNT1 = 0;							              //reset timer counter 
 	TIMSK1 |= (1<<OCIE1A);					    	//output compare interrupt for channel a enabled 
 	
+	/* 
+	 * TODO: clear v_sw_timer_ms[] array
+	 */
 }
 
-void f_kernel(void) {  // SysTick
+void f_kernel_tick(void) {  // SysTick
 	uint16_t v_temp;
 
 	if ((v_sys_state & bm_SYSTICK) != 0) {
@@ -76,7 +80,7 @@ void f_kernel(void) {  // SysTick
 		}
 
 		if ( (v_sys_timer % c_APP_TICKS) == 0 ) {
-			SET_REG(v_sys_state, bm_APPTICK);
+			SET_REG(v_sys_state, bm_APP2TICK);
 		}
 
 		for ( v_temp=0;v_temp<c_SYS_SWTIMERSMAX;++v_temp ) {
@@ -89,11 +93,18 @@ void f_kernel(void) {  // SysTick
 	
 }
 
+void f_init_kernel(unsigned long systick_freq)
+{
+	ZERO_REG(v_sys_state);
+	
+	f_init_systick_timer(systick_freq); // 1ms SysTick
+}
+
 void f_app_tick(void) {
 
-	if ((v_sys_state & bm_APPTICK) != 0) {
+	if ((v_sys_state & bm_APP2TICK) != 0) {
     
-		CLR_REG(v_sys_state, bm_APPTICK);
+		CLR_REG(v_sys_state, bm_APP2TICK);
     
 		f_run_app();
 	}
@@ -217,15 +228,15 @@ int main(void) {
 	 * TODO: Run a task for UART and have a buffer for tasks
 	 * to read or write data.
 	 */
-
-	v_sys_state = 0;
 	
-	unsigned char adc_val = 0;
-	char buffer[128];
+	//unsigned char adc_val = 0;
+	//char buffer[128];
 
-	f_config_serial();
+  f_init_kernel(F_CPU/1000);
+
+	f_config_uart();
 	
-	f_config_display();
+	f_lcd_init(5, 4, 3, 2, 1, 0, LCD_PIN_NC, LCD_PIN_NC, LCD_PIN_NC, LCD_PIN_NC);
 	
 	f_lcd_set_cursor(0, 0);
 	
@@ -243,8 +254,6 @@ int main(void) {
 	f_uart_put_str("UART initialized");
 	f_uart_new_line();
 
-	f_init_systick_timer(F_CPU/1000); // 1ms SysTick
-
 	f_uart_put_str("SysTimer initialized");
 	f_uart_new_line();
 	
@@ -254,7 +263,7 @@ int main(void) {
 
 	//f_InitADC();
 		
-	f_init_dbg();
+	f_init_dbg(FALSE);
 
   //f_reg_app_init_cb(&f_init_app_led);
 	//f_init_app();
@@ -264,7 +273,7 @@ int main(void) {
 	for(;;) {
 		f_debugger();
 		
-		f_kernel();
+		f_kernel_tick();
 
 		//f_app_tick();
 		

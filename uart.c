@@ -7,13 +7,13 @@
 
 #include "common.h"
 
-#define BAUD_RATE	9600
+#define BAUD_RATE_DEFAULT	9600
 
 #define c_UART_TXBUFLEN		    128
 #define c_UART_RXBUFLEN		    128
 
 /*** Utility Macros ***/
-#define UART_BAUDREG_CALC		((F_CPU - 16L*BAUD_RATE)/(16L*BAUD_RATE))
+#define UART_BAUDREG_CALC		((F_CPU - 16L*BAUD_RATE_DEFAULT)/(16L*BAUD_RATE_DEFAULT))
 
 volatile unsigned char v_uart_txbuf_count;
 volatile unsigned char v_uart_rxbuf_count;
@@ -25,7 +25,7 @@ unsigned char buf_uart_rx[c_UART_RXBUFLEN];
 char UART_CLR[] = {27, '[','H', 27, '[', '2', 'J',0};
 char UART_NL[] = {0x0d,0x0a,0};
 
-void f_config_serial(void) {
+void f_config_uart(void) {
 	
 	UBRR0L = ((unsigned char) (UART_BAUDREG_CALC)) & 0xFF;
 	UBRR0H = (((unsigned char) (UART_BAUDREG_CALC)) >> 8) & 0xFF;

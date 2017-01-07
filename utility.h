@@ -7,7 +7,12 @@
 #ifndef UTILITY_H_
 #define UTILITY_H_
 
-/*** Utilities ***/
+/*
+ * TODO move this to common.h
+ *      put util routines here
+ */
+
+/*** Utility and helper macros ***/
 
 /* Timer Value Calculation */
 #define TIMER_VAL_FROM_SEC(x)		(x)*1000
