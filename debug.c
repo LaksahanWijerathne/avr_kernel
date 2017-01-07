@@ -151,11 +151,9 @@ void f_init_dbg(boolean use_lcd) {
 
 void f_debugger(void) {
 	
-	short result;
 	unsigned char c;		
 	
-	if((result = f_uart_get_char()) != (-1)) {
-		c = result & 0xFF ;
+	if((c = f_uart_get_char()) != (0xFF)) {
 		
 		if((v_sys_state & bm_DBGEN) == 0) {
 			if (c == '*') {
