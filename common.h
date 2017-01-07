@@ -17,6 +17,13 @@
 /* !!! IMPORTANT !!! always define F_CPU before including any AVR headers */
 #define F_CPU		16000000UL
 
+/* ASCII character codes */
+#define c_ENTER		    0x0D
+#define c_NEWLINE	    0x0A
+#define c_TAB         0x09
+#define c_BKSPACE     0x08
+#define c_ESCAPE      0x1B
+
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
