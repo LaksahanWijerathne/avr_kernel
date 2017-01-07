@@ -28,11 +28,9 @@
 
 #include <avr/pgmspace.h>
 
+#include "common.h"
 #include "kernel.h"
 #include "lcd.h"
-
-#define c_ENTER		0x0D
-#define c_NEWLINE	0x0A
 
 #define outp(x,y)		(y) = (x)
 #define inp(x)			(x)
@@ -62,7 +60,7 @@ void f_debug_disable	   (void);
 
 unsigned char __attribute__((progmem)) lut_dbgcmd[] = {
 	
-	'R', 'W', 'B', 'C', '1', '2', '3', '4', 'I', 'P', 'd', 'D', 'A', '*'
+	'R', 'W', 'B', 'C', '1', '2', '3', '4', 'I', 'P', 'd', 'D', 'A', c_ESCAPE
 };	
 
 boolean v_use_lcd;
@@ -129,7 +127,7 @@ void (*fp_lut_dbgfunc[c_DEBUG_AVAILCMD])(void) = {
 	f_debug_rPORT,				//'d'
 	f_debug_wPORT,				//'D'
 	f_debug_readADC,			//'A'
-	f_debug_disable				//'*'
+	f_debug_disable				//'Esc'
 };
 
 void f_init_dbg(boolean use_lcd) {
@@ -157,19 +155,25 @@ void f_debugger(void) {
 		
 		if((v_sys_state & bm_DBGEN) == 0) {
 			if (c == '*') {
+				/* move to f_debug_enable */
 				v_sys_state |= bm_DBGEN;
-				f_uart_put_char(c);
-				f_uart_new_line();
+        f_uart_put_char(c);
+        f_uart_new_line();
 				f_uart_put_str("Debugger enabled!");
 				f_uart_new_line();
-				f_uart_put_str("? ");\
+				f_uart_put_str("? ");
 
 				if (v_use_lcd == TRUE) {
 				  f_lcd_put_str("? ");
 				}				  
+				/**************************/
 			}
 			return;
-		}		
+    }
+		else if (c == c_ESCAPE) {
+      f_debug_disable();
+	    return;
+		}
 		
 		buf_debugentry[v_debugcount] = c;
 		
