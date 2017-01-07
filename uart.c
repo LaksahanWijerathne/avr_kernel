@@ -66,7 +66,7 @@ ISR(USART_RX_vect) {
 	}
 }
 
-unsigned short f_uart_get_char(void) {
+unsigned char f_uart_get_char(void) {
 	unsigned char c;
 
 	if(v_uart_rxbuf_count > 0) {
