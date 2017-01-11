@@ -40,6 +40,9 @@ extern uint8_t v_sys_state;
 volatile unsigned char v_debugcount;
 volatile unsigned char buf_debugentry[c_DEBUG_BUFLEN];
 
+/* temp only */
+extern void f_app_uart_cb(void* data);
+
 // prototypes
 void f_debug_process_cmd(void);
 
@@ -130,48 +133,67 @@ void (*fp_lut_dbgfunc[c_DEBUG_AVAILCMD])(void) = {
 	f_debug_disable				//'Esc'
 };
 
+boolean v_dbg_trigger;
+
+void f_dbg_uart_cb(void* data) {
+	v_dbg_trigger = TRUE;
+}
+
 void f_init_dbg(boolean use_lcd) {
 	
 	v_use_lcd = !!use_lcd;
 	v_debugcount = 0;
-	v_sys_state |= bm_DBGEN;
-	
-	f_uart_put_str("Debugger initialized");
+  v_dbg_trigger = FALSE;
+
+	f_debug_enable();
+
+}
+
+void f_debug_enable() {
+  v_sys_state |= bm_DBGEN;
+  f_dereg_uart_cb(&f_dbg_uart_cb, '*');
+
+  f_uart_put_str("Debugger enabled!");
 	f_uart_new_line();
-	f_uart_put_str("Debugger running now");
+  f_uart_put_str("? ");
+
+  if (v_use_lcd == TRUE) {
+    f_lcd_put_str("? ");
+  }
+}
+
+void f_debug_disable(void)
+{
+	v_sys_state &= ~bm_DBGEN;
+  f_reg_uart_cb(&f_dbg_uart_cb, '*');
+        
+	f_uart_put_str("Debugger disabled!");
 	f_uart_new_line();
-	f_uart_put_str("? ");
-	
 	if (v_use_lcd == TRUE) {
-	  f_lcd_put_str("? ");
-	}	  
+	  f_lcd_clear();
+	}
 }
 
 void f_debugger(void) {
 	
 	unsigned char c;		
 	
-	if((c = f_uart_get_char()) != (0xFF)) {
-		
-		if((v_sys_state & bm_DBGEN) == 0) {
-			if (c == '*') {
-				/* move to f_debug_enable */
-				v_sys_state |= bm_DBGEN;
-        f_uart_put_char(c);
-        f_uart_new_line();
-				f_uart_put_str("Debugger enabled!");
-				f_uart_new_line();
-				f_uart_put_str("? ");
+  if (v_dbg_trigger == TRUE) {
+    v_dbg_trigger = FALSE;
+    f_uart_flush();
+    f_debug_enable();
+    f_uart_disable_callbacks();
+    return;
+  }
+  
+  if ( (v_sys_state & bm_DBGEN) == 0) {
+    return;
+  }
 
-				if (v_use_lcd == TRUE) {
-				  f_lcd_put_str("? ");
-				}				  
-				/**************************/
-			}
-			return;
-    }
-		else if (c == c_ESCAPE) {
+	if((c = f_uart_get_char()) != (0xFF)) {
+    if (c == c_ESCAPE) {
       f_debug_disable();
+      f_uart_enable_callbacks();
 	    return;
 		}
 		
@@ -377,18 +399,6 @@ void f_debug_wPROMbyte (void) {
 	v_data = f_EERead( addr);
 	f_debug_port(v_data);
 */
-}
-
-
-void f_debug_disable(void)
-{
-	v_sys_state &= ~bm_DBGEN;
-	
-	f_uart_put_str("Debugger disabled!");
-	f_uart_new_line();
-	if (v_use_lcd == TRUE) {
-	  f_lcd_clear();
-	}	  
 }
 
 void f_debug_wPORT(void)
