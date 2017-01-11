@@ -34,7 +34,7 @@
 #define c_DEBUG_AVAILCMD	    14
 #define c_DEBUG_BUFLEN		    128
 
-#define c_MAX_APP_INIT_HOOKS      2
+#define c_MAX_APPS      2
 
 /*** Bit values ***/
 #define bv_SYSTICK			0
@@ -44,10 +44,9 @@
 
 /*** Bitmask ***/
 #define bm_SYSTICK			(1<<bv_SYSTICK)
-#define bm_APP2TICK			(1<<bv_APP1TICK)
+#define bm_APP1TICK			(1<<bv_APP1TICK)
 #define bm_APP2TICK			(1<<bv_APP2TICK)
 #define bm_DBGEN	    	(1<<bv_DBGEN)
-
 
 void SIG_OUTPUT_COMPARE1A( void ) __attribute__ ( ( signal ) );
 

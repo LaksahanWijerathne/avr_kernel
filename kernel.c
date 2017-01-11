@@ -10,7 +10,7 @@
 #include "lcd.h"
 #include "app.h"
 
-/*** Settings ***/
+/*** App settings ***/
 #define APP_SWITCH_PIN		2
 #define APP_LED_PIN			5
 
@@ -20,6 +20,8 @@ typedef enum {
 } app_state_t;
 
 volatile app_state_t v_app_state;
+
+/********************/
 
 volatile uint16_t v_sys_state;		// the internal kernel status variable
 volatile uint16_t v_sys_timer;		// the kernel timer count variable
@@ -32,9 +34,22 @@ uint16_t v_sw_timer_ms[c_SYS_SWTIMERSMAX];
  */
 typedef void(*fp_app_init_cb)(void*);
 
-void (*fp_app_init_cb_arr[c_MAX_APP_INIT_HOOKS])(void*);
+void (*fp_app_init_cb_arr[c_MAX_APPS])(void*);
 uint8_t v_app_init_cb_idx;
 
+/*
+ * TODO: add framework for callbacks to run apps
+ */
+typedef void(*fp_app_cb)(void*);
+
+void (*fp_app_cb_arr[c_MAX_APPS])(void*);
+
+/*
+ * Replace index variables with bitmasks.
+ */
+uint8_t v_app_cb_idx;
+
+/* Timer interrupt routine */
 //void SIG_OUTPUT_COMPARE1A( void ) {
 ISR(TIMER1_COMPA_vect) {
   SET_REG_BIT(v_sys_state, bv_SYSTICK);
@@ -80,6 +95,7 @@ void f_kernel_tick(void) {  // SysTick
 		}
 
 		if ( (v_sys_timer % c_APP_TICKS) == 0 ) {
+			SET_REG(v_sys_state, bm_APP1TICK);
 			SET_REG(v_sys_state, bm_APP2TICK);
 		}
 
@@ -102,11 +118,11 @@ void f_init_kernel(unsigned long systick_freq)
 
 void f_app_tick(void) {
 
-	if ((v_sys_state & bm_APP2TICK) != 0) {
-    
-		CLR_REG(v_sys_state, bm_APP2TICK);
-    
+	if ((v_sys_state & bm_APP1TICK) != 0) {
+
 		f_run_app();
+    
+		CLR_REG(v_sys_state, bm_APP1TICK);
 	}
 
 }
@@ -117,7 +133,7 @@ boolean f_reg_app_init_cb(fp_app_init_cb hook) {
     return FALSE;
   }
   
-  if (v_app_init_cb_idx == c_MAX_APP_INIT_HOOKS) {
+  if (v_app_init_cb_idx == c_MAX_APPS) {
     /* cannot register anymore callbacks */
     return FALSE;
   }
@@ -132,41 +148,63 @@ void f_init_app(void) {
 	v_app_state = APP_STATE_IDLE;
 
   uint8_t i;
-  for (i = 0; i > c_MAX_APP_INIT_HOOKS; i++) {
+  for (i = 0; i > c_MAX_APPS; i++) {
     (*fp_app_init_cb_arr[i])(NULL);
   }
 
 	v_sw_timer_ms[c_APP_TIMERID] = 0;
 }
 
+boolean v_app_trigger;
+
+void f_init_app_led(void* data) {
+  v_app_trigger = FALSE;
+	OUT_PORT(DDRB);
+	ZERO_PORT(PORTB);
+}  
+
+void f_app_uart_cb(void* data) {
+	v_app_trigger = TRUE;
+}
+
 void f_run_app(void) {
-	
+
 	switch (v_app_state) {
 
 		case APP_STATE_IDLE:
-			//if(GET_PIN(PINB, APP_SWITCH_PIN) == 0) {
-			if (v_sw_timer_ms[c_APP_TIMERID] == 0) {
-				v_app_state = APP_STATE_ON;
+		{
+      ////if(GET_PIN(PINB, APP_SWITCH_PIN) == 0) {
+      //if (v_sw_timer_ms[c_APP_TIMERID] == 0) {
+		  if (v_app_trigger == TRUE) {
+        v_app_state = APP_STATE_ON;
+        v_app_trigger = FALSE;
 
-				SET_PIN(PORTB,APP_LED_PIN);
+        //SET_PIN(PORTB,APP_LED_PIN);
+
+        v_sw_timer_ms[c_APP_TIMERID] = TIMER_VAL_FROM_SEC(3); // App timer for 3 second
+
+        f_uart_put_str_ext("APP state ON");
+        f_uart_new_line_ext();
 				
-				v_sw_timer_ms[c_APP_TIMERID] = TIMER_VAL_FROM_SEC(3); // App timer for 3 second
-				
-				f_uart_put_str("APP LED is on");
-				f_uart_new_line();
+        f_lcd_clear();
+        f_lcd_put_str("APP state ON");
+ 
 			}
 			break;
-
+		}    
 		case APP_STATE_ON:
 			if (v_sw_timer_ms[c_APP_TIMERID] == 0) {
 				v_app_state = APP_STATE_IDLE;
 
-				CLR_PIN(PORTB,APP_LED_PIN);
+				//CLR_PIN(PORTB,APP_LED_PIN);
 				
-				v_sw_timer_ms[c_APP_TIMERID] = TIMER_VAL_FROM_SEC(3); // App timer for 3 second
+				//v_sw_timer_ms[c_APP_TIMERID] = TIMER_VAL_FROM_SEC(3); // App timer for 3 second
 				
-				f_uart_put_str("APP LED is off");
-				f_uart_new_line();
+				f_uart_put_str_ext("APP state OFF");
+				f_uart_new_line_ext();
+				
+				f_lcd_clear();
+				f_lcd_put_str("APP state OFF");
 			}
 			break;
 
@@ -215,12 +253,6 @@ void f_wait()
    }    
 }
 
-void f_init_app_led(void* data) {
-  
-	OUT_PORT(DDRB);
-	ZERO_PORT(PORTB);
-}  
-
 /************** main *******************/
 int main(void) {
 	
@@ -242,41 +274,36 @@ int main(void) {
 	
 	f_lcd_put_str("Kush v-0.1 beta");
 	
-	f_uart_put_str("Kush");
-	f_uart_new_line();
+	f_uart_put_str_ext("Kush");
+	f_uart_new_line_ext();
 
-	f_uart_put_str("Co-operative kernel for AVR family");
-	f_uart_new_line();
+	f_uart_put_str_ext("Co-operative kernel for AVR family");
+	f_uart_new_line_ext();
 	
-	f_uart_put_str("v - 0.1 beta");
-	f_uart_new_line();
-	
-	f_uart_put_str("UART initialized");
-	f_uart_new_line();
-
-	f_uart_put_str("SysTimer initialized");
-	f_uart_new_line();
+	f_uart_put_str_ext("v - 0.1 beta");
+	f_uart_new_line_ext();
 	
 	DELAY_MS(1500);
 	
 	f_lcd_clear();
 
 	//f_InitADC();
-		
+	
 	f_init_dbg(FALSE);
 
-  //f_reg_app_init_cb(&f_init_app_led);
-	//f_init_app();
+  f_reg_app_init_cb(&f_init_app_led);
+  f_reg_uart_cb(&f_app_uart_cb, 'c');
+	f_init_app();
 
 	sei();
 
 	for(;;) {
-		f_debugger();
-		
 		f_kernel_tick();
-
-		//f_app_tick();
 		
+		f_app_tick();
+
+		f_debugger();
+				
 		//adc_val = f_ReadADC(1);
 		
 		//sprintf(buffer, "ADC value is: %d", adc_val);
