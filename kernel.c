@@ -7,32 +7,23 @@
 
 
 #include "kernel.h"
+#include "debug.h"
+#include "uart.h"
 #include "lcd.h"
 #include "app.h"
-
-/*** App settings ***/
-#define APP_SWITCH_PIN		2
-#define APP_LED_PIN			5
-
-typedef enum {
-	APP_STATE_IDLE,
-	APP_STATE_ON
-} app_state_t;
-
-volatile app_state_t v_app_state;
 
 /********************/
 
 volatile uint16_t v_sys_state;		// the internal kernel status variable
 volatile uint16_t v_sys_timer;		// the kernel timer count variable
 
-uint16_t v_sw_timer_ms[c_SYS_SWTIMERSMAX];
+uint16_t v_sw_timer_ms[c_SYS_MAXSWTIMERS];
 
 /*
- * currently arguments are not supported
- * args should be NULL
+ * Bit mask for SW timers
+ * Set bits for timers in use
  */
-typedef void(*fp_app_init_cb)(void*);
+uint8_t v_sw_timers;
 
 void (*fp_app_init_cb_arr[c_MAX_APPS])(void*);
 uint8_t v_app_init_cb_idx;
@@ -60,6 +51,96 @@ ISR(TIMER1_COMPA_vect) {
 	}
 }
 
+uint8_t f_get_free_timer(void)
+{
+	uint8_t id;
+	for(id = 0; id < c_SYS_MAXSWTIMERS; id++)
+	{
+		if ( (v_sw_timers & (1<<id)) == 0 )
+		{
+			SET_REG_BIT(v_sw_timers, id);
+			return id;
+		}
+	}
+	return 0xFF;
+}
+
+boolean f_dereg_timer(uint8_t id)
+{
+	if (id >= c_SYS_MAXSWTIMERS)
+	{
+		return FALSE;
+	}
+	if ( (v_sw_timers & (1<<id)) == 0 )
+	{
+		return FALSE;
+	}
+	
+	CLR_REG_BIT(v_sw_timers, id);
+	return TRUE;
+}
+
+boolean f_set_timer(uint8_t id, uint16_t ms)
+{
+	if (id >= c_SYS_MAXSWTIMERS)
+	{
+		return FALSE;
+	}
+	if ( (v_sw_timers & (1<<id)) == 0 )
+	{
+		return FALSE;
+	}
+	
+	v_sw_timer_ms[id] = ms;
+	return TRUE;
+}
+
+boolean f_clr_timer(uint8_t id)
+{
+	if (id >= c_SYS_MAXSWTIMERS)
+	{
+		return FALSE;
+	}
+	if ( (v_sw_timers & (1<<id)) == 0 )
+	{
+		return FALSE;
+	}
+	
+	v_sw_timer_ms[id] = 0;
+	return TRUE;
+}
+
+uint16_t f_check_timer(uint8_t id)
+{
+	if (id >= c_SYS_MAXSWTIMERS)
+	{
+		return 0xFFFF;
+	}
+	if ( (v_sw_timers & (1<<id)) == 0 )
+	{
+		return 0xFFFF;
+	}
+
+  return v_sw_timer_ms[id];
+}
+
+boolean f_reg_app_init_cb(fp_app_init_cb hook) {
+  
+  if (hook == NULL) {
+    return FALSE;
+  }
+  
+  if (v_app_init_cb_idx == c_MAX_APPS) {
+    /* cannot register anymore callbacks */
+    return FALSE;
+  }
+  
+  fp_app_init_cb_arr[v_app_init_cb_idx] = hook;
+  v_app_init_cb_idx++;
+  
+  return TRUE;
+}
+
 void f_init_systick_timer(unsigned short duration) { 
 	
   TCCR1A = (0<<COM1A1)| (0<<COM1A0) |     //normal operation for com1a 
@@ -77,8 +158,13 @@ void f_init_systick_timer(unsigned short duration) {
 	TIMSK1 |= (1<<OCIE1A);					    	//output compare interrupt for channel a enabled 
 	
 	/* 
-	 * TODO: clear v_sw_timer_ms[] array
+	 * clear v_sw_timer_ms[] array
 	 */
+	uint8_t id;
+	for (id = 0; id < c_SYS_MAXSWTIMERS; id++)
+	{
+		v_sw_timer_ms[id] = 0;
+	}
 }
 
 void f_kernel_tick(void) {  // SysTick
@@ -99,7 +185,7 @@ void f_kernel_tick(void) {  // SysTick
 			SET_REG(v_sys_state, bm_APP2TICK);
 		}
 
-		for ( v_temp=0;v_temp<c_SYS_SWTIMERSMAX;++v_temp ) {
+		for ( v_temp=0;v_temp<c_SYS_MAXSWTIMERS;++v_temp ) {
       
 			if ( v_sw_timer_ms[v_temp] != 0 ) {
 				--v_sw_timer_ms[v_temp];
@@ -114,6 +200,8 @@ void f_init_kernel(unsigned long systick_freq)
 	ZERO_REG(v_sys_state);
 	
 	f_init_systick_timer(systick_freq); // 1ms SysTick
+	
+	v_app_init_cb_idx = 0;
 }
 
 void f_app_tick(void) {
@@ -127,90 +215,11 @@ void f_app_tick(void) {
 
 }
 
-boolean f_reg_app_init_cb(fp_app_init_cb hook) {
-  
-  if (hook == NULL) {
-    return FALSE;
-  }
-  
-  if (v_app_init_cb_idx == c_MAX_APPS) {
-    /* cannot register anymore callbacks */
-    return FALSE;
-  }
-  
-  fp_app_init_cb_arr[v_app_init_cb_idx] = hook;
-  v_app_init_cb_idx += 1;
-  
-  return TRUE;
-}
-
-void f_init_app(void) {
-	v_app_state = APP_STATE_IDLE;
-
+void f_init_apps(void) {
   uint8_t i;
-  for (i = 0; i > c_MAX_APPS; i++) {
+  for (i = 0; i < v_app_init_cb_idx; i++) {
     (*fp_app_init_cb_arr[i])(NULL);
   }
-
-	v_sw_timer_ms[c_APP_TIMERID] = 0;
-}
-
-boolean v_app_trigger;
-
-void f_init_app_led(void* data) {
-  v_app_trigger = FALSE;
-	OUT_PORT(DDRB);
-	ZERO_PORT(PORTB);
-}  
-
-void f_app_uart_cb(void* data) {
-	v_app_trigger = TRUE;
-}
-
-void f_run_app(void) {
-
-	switch (v_app_state) {
-
-		case APP_STATE_IDLE:
-		{
-      ////if(GET_PIN(PINB, APP_SWITCH_PIN) == 0) {
-      //if (v_sw_timer_ms[c_APP_TIMERID] == 0) {
-		  if (v_app_trigger == TRUE) {
-        v_app_state = APP_STATE_ON;
-        v_app_trigger = FALSE;
-
-        //SET_PIN(PORTB,APP_LED_PIN);
-
-        v_sw_timer_ms[c_APP_TIMERID] = TIMER_VAL_FROM_SEC(3); // App timer for 3 second
-
-        f_uart_put_str_ext("APP state ON");
-        f_uart_new_line_ext();
-				
-        f_lcd_clear();
-        f_lcd_put_str("APP state ON");
- 
-			}
-			break;
-		}    
-		case APP_STATE_ON:
-			if (v_sw_timer_ms[c_APP_TIMERID] == 0) {
-				v_app_state = APP_STATE_IDLE;
-
-				//CLR_PIN(PORTB,APP_LED_PIN);
-				
-				//v_sw_timer_ms[c_APP_TIMERID] = TIMER_VAL_FROM_SEC(3); // App timer for 3 second
-				
-				f_uart_put_str_ext("APP state OFF");
-				f_uart_new_line_ext();
-				
-				f_lcd_clear();
-				f_lcd_put_str("APP state OFF");
-			}
-			break;
-
-		default:
-			;
-	}
 }
 
 /***************************************/
@@ -245,6 +254,7 @@ uint16_t f_ReadADC(uint8_t ch)
   return(ADC);
 }
 
+
 void f_wait()
 {
    uint8_t i;
@@ -253,13 +263,23 @@ void f_wait()
    }    
 }
 
+/***************************************/
+
+void f_print_startup_msg() {
+	f_lcd_put_str("Kush v-0.1 beta");
+	
+	f_uart_put_str("Kush v-0.1 beta");
+	f_uart_new_line();
+
+	f_uart_put_str("Co-operative kernel for AVR family");
+	f_uart_new_line();
+
+}
+
 /************** main *******************/
 int main(void) {
-	
-	/**
-	 * TODO: Run a task for UART and have a buffer for tasks
-	 * to read or write data.
-	 */
+
+	/* Use code snippets, CTRL+K, CTRL+X */
 	
 	//unsigned char adc_val = 0;
 	//char buffer[128];
@@ -272,18 +292,11 @@ int main(void) {
 	
 	f_lcd_set_cursor(0, 0);
 	
-	f_lcd_put_str("Kush v-0.1 beta");
+  f_print_startup_msg();
 	
-	f_uart_put_str_ext("Kush");
-	f_uart_new_line_ext();
-
-	f_uart_put_str_ext("Co-operative kernel for AVR family");
-	f_uart_new_line_ext();
+	DELAY_MS(2500);
 	
-	f_uart_put_str_ext("v - 0.1 beta");
-	f_uart_new_line_ext();
-	
-	DELAY_MS(1500);
+	f_uart_clrscr();
 	
 	f_lcd_clear();
 
@@ -293,7 +306,8 @@ int main(void) {
 
   f_reg_app_init_cb(&f_init_app_led);
   f_reg_uart_cb(&f_app_uart_cb, 'c');
-	f_init_app();
+	
+	f_init_apps();
 
 	sei();
 

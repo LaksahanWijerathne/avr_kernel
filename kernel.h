@@ -11,7 +11,7 @@
 #define KERNEL_H_
 
 #include "common.h"
-
+#include "debug.h"
 /*
  * TODO have config.h file to put
  *      all config info
@@ -25,14 +25,7 @@
 
 /*** Constants ***/
 #define c_SYS_TIMEMAX	  	    0xFFFE
-#define c_SYS_SWTIMERSMAX	    4
-#define c_SYS_SWTIMERID0	    0
-#define c_SYS_SWTIMERID1	    1
-#define c_SYS_SWTIMERID2	    2
-#define c_SYS_SWTIMERID3	    3
-
-#define c_DEBUG_AVAILCMD	    14
-#define c_DEBUG_BUFLEN		    128
+#define c_SYS_MAXSWTIMERS	    4
 
 #define c_MAX_APPS      2
 
@@ -40,18 +33,38 @@
 #define bv_SYSTICK			0
 #define bv_APP1TICK			1
 #define bv_APP2TICK			2
-#define bv_DBGEN		  	3
 
 /*** Bitmask ***/
 #define bm_SYSTICK			(1<<bv_SYSTICK)
 #define bm_APP1TICK			(1<<bv_APP1TICK)
 #define bm_APP2TICK			(1<<bv_APP2TICK)
-#define bm_DBGEN	    	(1<<bv_DBGEN)
 
-void SIG_OUTPUT_COMPARE1A( void ) __attribute__ ( ( signal ) );
+#define c_APP_TICKS			      10		// 10ms AppTick
+
+/*
+ * currently arguments are not supported
+ * args should be NULL
+ */
+typedef void(*fp_app_init_cb)(void*);
+
+//void SIG_OUTPUT_COMPARE1A( void ) __attribute__ ( ( signal ) );
 
 void f_init_systick_timer(unsigned short duration);
 
 void f_kernel_tick(void);
+
+uint8_t f_get_free_timer(void);
+
+boolean f_reg_timer(uint8_t id, uint16_t ms);
+
+boolean f_dereg_timer(uint8_t id);
+
+boolean f_set_timer(uint8_t id, uint16_t ms);
+
+boolean f_clr_timer(uint8_t id);
+
+uint16_t f_check_timer(uint8_t id);
+
+boolean f_reg_app_init_cb(fp_app_init_cb hook);
 
 #endif /* KERNEL_H_ */

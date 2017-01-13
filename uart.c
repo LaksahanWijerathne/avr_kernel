@@ -6,7 +6,8 @@
  */
 
 #include "common.h"
-#include "kernel.h"
+#include "debug.h"
+#include "uart_priv.h"
 
 #define BAUD_RATE_DEFAULT	9600
 
@@ -30,8 +31,6 @@ extern uint8_t v_sys_state;
 
 #define c_MAX_UART_RECV_CB      2	
 
-typedef void(*fp_uart_recv_cb)(void*);
-
 void (*fp_uart_cb_arr[c_MAX_UART_RECV_CB])(void*);
 
 /*
@@ -43,25 +42,6 @@ char v_uart_recv_match[c_MAX_UART_RECV_CB];
 
 boolean v_uart_cb_enabled;
 
-void f_uart_flush() {
-	
-  p_uart_txin = p_uart_txout = buf_uart_tx;
-	p_uart_rxin = p_uart_rxout = buf_uart_rx;
-
-	v_uart_txbuf_count = 0;
-	v_uart_rxbuf_count = 0;
-
-}
-
-void f_uart_flush_ext() {
-	if (v_sys_state & bm_DBGEN) {
-		return;
-	}		
-	else {
-		f_uart_flush();
-	}
-}	
-
 void f_config_uart(void) {
 	
 	UBRR0L = ((unsigned char) (UART_BAUDREG_CALC)) & 0xFF;
@@ -71,7 +51,7 @@ void f_config_uart(void) {
 	UCSR0B = (1<<RXCIE0) | (1<<UDRIE0)| (1<<RXEN0) | (1<<TXEN0);
 	UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);
 
-  f_uart_flush();
+  f_uart_flush_priv();
 
   v_uart_cb_enabled = FALSE;
 }
@@ -212,7 +192,26 @@ size_t f_uart_peek_str(unsigned char* str, unsigned int n) {
 	return len;
 }
 
-unsigned char f_uart_get_char(void) {
+void f_uart_flush_priv() {
+	
+  p_uart_txin = p_uart_txout = buf_uart_tx;
+	p_uart_rxin = p_uart_rxout = buf_uart_rx;
+
+	v_uart_txbuf_count = 0;
+	v_uart_rxbuf_count = 0;
+
+}
+
+void f_uart_flush() {
+	if (v_sys_state & bm_DBGEN) {
+		return;
+	}		
+	else {
+		f_uart_flush_priv();
+	}
+}	
+
+unsigned char f_uart_get_char_priv(void) {
 
 	unsigned char c;
 
@@ -236,16 +235,16 @@ unsigned char f_uart_get_char(void) {
 	}
 }	
 
-unsigned char f_uart_get_char_ext(void) {
+unsigned char f_uart_get_char(void) {
 	if (v_sys_state & bm_DBGEN) {
 		return 0xFF;
 	}
 	else {
-	  return f_uart_get_char();
+	  return f_uart_get_char_priv();
 	}	
 }
 
-size_t f_uart_get_str(unsigned char* str, unsigned int n) {
+size_t f_uart_get_str_priv(unsigned char* str, unsigned int n) {
 	
 	uint8_t i;
 	size_t len = 0;
@@ -256,7 +255,7 @@ size_t f_uart_get_str(unsigned char* str, unsigned int n) {
 	
 	for (i = 0; i < n; i++) {
 		
-		c = f_uart_get_char();
+		c = f_uart_get_char_priv();
 		
 		if (c != 0xFF) {
 			*p_str++ = c;
@@ -270,19 +269,19 @@ size_t f_uart_get_str(unsigned char* str, unsigned int n) {
 	return len;
 }
 
-size_t f_uart_get_str_ext(unsigned char* str, unsigned int n) {
+size_t f_uart_get_str(unsigned char* str, unsigned int n) {
 	if (v_sys_state & bm_DBGEN) {
 		return 0;
 	}
 	else {
-	  return f_uart_get_str(str, n);
+	  return f_uart_get_str_priv(str, n);
 	}	
 }
 
 /*
  * TODO:  optimize this
  */
-size_t f_uart_put_char(unsigned char c) {
+size_t f_uart_put_char_priv(unsigned char c) {
 	
   if (v_uart_txbuf_count < c_UART_TXBUFLEN) {
     
@@ -308,22 +307,22 @@ size_t f_uart_put_char(unsigned char c) {
 }
 
 
-size_t f_uart_put_char_ext(unsigned char c) {
+size_t f_uart_put_char(unsigned char c) {
 	if (v_sys_state & bm_DBGEN) {
 		return 0;
 	}
 	else {
-    return f_uart_put_char(c);
+    return f_uart_put_char_priv(c);
 	}	
 }		
 
-size_t f_uart_put_str(char s[]) {
+size_t f_uart_put_str_priv(char s[]) {
 	
 	char *c = s;
 	size_t len = 0;
 
 	while (*c) {
-    if (f_uart_put_char(*c)) {
+    if (f_uart_put_char_priv(*c)) {
       ++c;
 	    ++len;
 		}
@@ -332,31 +331,39 @@ size_t f_uart_put_str(char s[]) {
 	return len;
 }
 
-size_t f_uart_put_str_ext(char s[]) {
+size_t f_uart_put_str(char s[]) {
 	if (v_sys_state & bm_DBGEN) {
 		return 0;
 	}
 	else {
-		return f_uart_put_str(s);
+		return f_uart_put_str_priv(s);
 	}
 }
 
-unsigned char f_uart_new_line(void) {
+unsigned char f_uart_new_line_priv(void) {
 	
-	return f_uart_put_str(UART_NL);
+	return f_uart_put_str_priv(UART_NL);
 }
 
-unsigned char f_uart_new_line_ext(void) {
+unsigned char f_uart_new_line(void) {
 	if (v_sys_state & bm_DBGEN) {
 		return 0xFF;
 	}
 	else {
-		return f_uart_new_line();
+		return f_uart_new_line_priv();
 	}
-	
 }
 
-unsigned char f_Uart_ClrScr(void) {
+unsigned char f_uart_clrscr_priv(void) {
 	
-	return f_uart_put_str(UART_CLR);
+	return f_uart_put_str_priv(UART_CLR);
+}
+
+unsigned char f_uart_clrscr(void) {
+	if (v_sys_state & bm_DBGEN) {
+		return 0xFF;
+	}
+	else {
+		return f_uart_clrscr_priv();
+	}
 }

@@ -10,6 +10,7 @@
 #define LCD_H_
 
 #include "common.h"
+#include "utility.h"
 
 /*** C0nfig data ***/
 #define LCD_PORT	PORTB
@@ -68,7 +69,9 @@
 #define LCD_5x10DOTS            0x04
 #define LCD_5x8DOTS             0x00
 
-void f_lcd_write (unsigned char data);
+void f_lcd_write(unsigned char data);
+
+void f_lcd_clear();
 
 void f_lcd_cmd(char cmd);
 

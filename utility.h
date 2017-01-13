@@ -7,11 +7,6 @@
 #ifndef UTILITY_H_
 #define UTILITY_H_
 
-/*
- * TODO move this to common.h
- *      put util routines here
- */
-
 /*** Utility and helper macros ***/
 
 /* Timer Value Calculation */
@@ -40,5 +35,11 @@
 
 #define DELAY_MS(x)           _delay_ms(x)
 #define DELAY_US(x)           _delay_us(x)
+
+unsigned short f_hex_to_bin(char *hex_in);
+
+void f_bin_to_hex(unsigned char bin_in, char *str_out);
+
+unsigned char f_hex_byte_to_bin(char *hex_in);
 
 #endif /* UTILITY_H_ */

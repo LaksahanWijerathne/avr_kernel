@@ -29,8 +29,6 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 
-#include "utility.h"
-
 typedef uint8_t boolean;
 
 #define TRUE  (uint8_t)1

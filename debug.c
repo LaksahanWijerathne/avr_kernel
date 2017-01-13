@@ -29,92 +29,45 @@
 #include <avr/pgmspace.h>
 
 #include "common.h"
-#include "kernel.h"
+#include "utility.h"
+#include "debug.h"
+#include "uart_priv.h"
 #include "lcd.h"
+
+#define c_DEBUG_AVAILCMD	    14
+#define c_DEBUG_BUFLEN		    128
 
 #define outp(x,y)		(y) = (x)
 #define inp(x)			(x)
 
 extern uint8_t v_sys_state;
 
+/* ISR modified variables here */
 volatile unsigned char v_debugcount;
 volatile unsigned char buf_debugentry[c_DEBUG_BUFLEN];
 
-/* temp only */
-extern void f_app_uart_cb(void* data);
-
-// prototypes
-void f_debug_process_cmd(void);
-
-void f_debug_readbyte    (void);
-void f_debug_writebyte   (void);
-void f_debug_asctab      (void);
-void f_debug_bintab      (void);
-void f_debug_pinA        (void);
-void f_debug_pinB        (void);
-void f_debug_pinC        (void);
-void f_debug_pinD        (void);
-void f_debug_rPROMbyte	 (void);
-void f_debug_wPROMbyte	 (void);
-void f_debug_wPORT		 (void);
-void f_debug_rPORT		 (void);
-void f_debug_readADC	 (void);
-void f_debug_disable	   (void);
-
+/* Read only data */
 unsigned char __attribute__((progmem)) lut_dbgcmd[] = {
 	
 	'R', 'W', 'B', 'C', '1', '2', '3', '4', 'I', 'P', 'd', 'D', 'A', c_ESCAPE
 };	
 
-boolean v_use_lcd;
-
-/*** Hex to Bin ***/
-
-unsigned short f_HexBin(char *hex_in)
-{
-	unsigned short data = 0;
-	unsigned char i;
-	char cbyte;
-
-	for(i=0; i<4; i++)
-	{
-		cbyte = *(hex_in+i);
-		if ( cbyte >= 'A') cbyte = (cbyte - 'A') + 10;
-		else cbyte-= '0';
-		data |= (cbyte << (4*(3-i)));
-	}
-
-	return data;
-}
-
-void f_BinHex(unsigned char bin_in, char *str_out) {
-	static char lut_Hex[]={'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
-	*(str_out+0) = lut_Hex[(bin_in >> 4) & 0x0F];
-	*(str_out+1) = lut_Hex[bin_in & 0x0F];
-}
-
-unsigned char f_HexBinByte(char *hex_in)
-{
-	unsigned char data = 0;
-	unsigned char i;
-	char cbyte;
-
-	for(i=0; i<2; i++)
-	{
-		cbyte = *(hex_in+i);
-		if ( cbyte >= 'A') {
-			cbyte = (cbyte - 'A') + 10;
-		}			
-		else {
-			cbyte-= '0';
-		}			
-		data |= (cbyte << (4*(1-i)));
-	}
-
-	return data;
-}
-
-
+/* Declarations */
+static void f_debug_process_cmd(void);
+static void f_debug_readbyte(void);
+static void f_debug_writebyte(void);
+static void f_debug_asctab(void);
+static void f_debug_bintab(void);
+static void f_debug_pinA(void);
+static void f_debug_pinB(void);
+static void f_debug_pinC(void);
+static void f_debug_pinD(void);
+static void f_debug_rPROMbyte(void);
+static void f_debug_wPROMbyte(void);
+static void f_debug_wPORT(void);
+static void f_debug_rPORT(void);
+static void f_debug_readADC(void);
+void f_debug_disable(void);
 
 void (*fp_lut_dbgfunc[c_DEBUG_AVAILCMD])(void) = {
 	f_debug_readbyte,			//'R'
@@ -128,22 +81,37 @@ void (*fp_lut_dbgfunc[c_DEBUG_AVAILCMD])(void) = {
 	f_debug_rPROMbyte,		//'I'
 	f_debug_wPROMbyte,		//'P'
 	f_debug_rPORT,				//'d'
-	f_debug_wPORT,				//'D'
+	f_debug_wPORT,				//''D
 	f_debug_readADC,			//'A'
 	f_debug_disable				//'Esc'
 };
 
-boolean v_dbg_trigger;
+#define bv_USE_LCD          1
+#define bv_DBG_TRIG         2
 
-void f_dbg_uart_cb(void* data) {
-	v_dbg_trigger = TRUE;
+uint8_t v_dbg_state;
+
+#define DBG_EN_LCD()        v_dbg_state |= (1<<bv_USE_LCD)
+#define DBG_DIS_LCD()       v_dbg_state &= ~(1<<bv_USE_LCD)
+#define DBG_SET_TRIG()      v_dbg_state |= (1<<bv_DBG_TRIG)
+#define DBG_CLR_TRIG()      v_dbg_state &= ~(1<<bv_DBG_TRIG)
+
+static void f_dbg_uart_cb(void* data) {
+	DBG_SET_TRIG();
 }
 
 void f_init_dbg(boolean use_lcd) {
 	
-	v_use_lcd = !!use_lcd;
+	if (!!use_lcd == TRUE)
+	{
+	  DBG_EN_LCD();
+	}
+	else
+	{
+	  DBG_DIS_LCD();
+	}	
 	v_debugcount = 0;
-  v_dbg_trigger = FALSE;
+  DBG_CLR_TRIG();
 
 	f_debug_enable();
 
@@ -153,23 +121,22 @@ void f_debug_enable() {
   v_sys_state |= bm_DBGEN;
   f_dereg_uart_cb(&f_dbg_uart_cb, '*');
 
-  f_uart_put_str("Debugger enabled!");
-	f_uart_new_line();
-  f_uart_put_str("? ");
+  f_uart_put_str_priv("Debugger enabled!");
+	f_uart_new_line_priv();
+  f_uart_put_str_priv("? ");
 
-  if (v_use_lcd == TRUE) {
+  if ( v_dbg_state & (1<<bv_USE_LCD) ) {
     f_lcd_put_str("? ");
   }
 }
 
-void f_debug_disable(void)
-{
+void f_debug_disable(void) {
 	v_sys_state &= ~bm_DBGEN;
   f_reg_uart_cb(&f_dbg_uart_cb, '*');
         
-	f_uart_put_str("Debugger disabled!");
-	f_uart_new_line();
-	if (v_use_lcd == TRUE) {
+	f_uart_put_str_priv("Debugger disabled!");
+	f_uart_new_line_priv();
+	if ( v_dbg_state & (1<<bv_USE_LCD) ) {
 	  f_lcd_clear();
 	}
 }
@@ -178,9 +145,9 @@ void f_debugger(void) {
 	
 	unsigned char c;		
 	
-  if (v_dbg_trigger == TRUE) {
-    v_dbg_trigger = FALSE;
-    f_uart_flush();
+  if ( v_dbg_state & (1<<bv_DBG_TRIG) ) {
+	  DBG_CLR_TRIG();
+    f_uart_flush_priv();
     f_debug_enable();
     f_uart_disable_callbacks();
     return;
@@ -190,7 +157,7 @@ void f_debugger(void) {
     return;
   }
 
-	if((c = f_uart_get_char()) != (0xFF)) {
+	if((c = f_uart_get_char_priv()) != (0xFF)) {
     if (c == c_ESCAPE) {
       f_debug_disable();
       f_uart_enable_callbacks();
@@ -203,19 +170,19 @@ void f_debugger(void) {
 		
 		if(v_debugcount == c_DEBUG_BUFLEN) {
 			v_debugcount = 0;
-			f_uart_put_str("Error");
-			f_uart_new_line();
-			f_uart_put_str("? ");
+			f_uart_put_str_priv("Error");
+			f_uart_new_line_priv();
+			f_uart_put_str_priv("? ");
 
-	    if (v_use_lcd == TRUE) {
+	    if ( v_dbg_state & (1<<bv_USE_LCD) ) {
 			    f_lcd_clear();
 			    f_lcd_put_str("? ");
 		  }				
 		}
 		else {
-			f_uart_put_char(c);
+			f_uart_put_char_priv(c);
 			
-			if (v_use_lcd == TRUE) {
+			if ( v_dbg_state & (1<<bv_USE_LCD) ) {
 			  f_lcd_put_char(c);
 			}
 						  
@@ -224,9 +191,9 @@ void f_debugger(void) {
 				if((v_sys_state & bm_DBGEN) == 0) {
 					return;
 				}					
-				f_uart_put_str("? ");
+				f_uart_put_str_priv("? ");
 
-      	if (v_use_lcd == TRUE) {
+      	if ( v_dbg_state & (1<<bv_USE_LCD) ) {
 				  f_lcd_clear();
 				  f_lcd_put_str("? ");
 		    }				  
@@ -235,13 +202,15 @@ void f_debugger(void) {
 	}
 }
 
-void f_debug_process_cmd(void) {
+static void f_debug_process_cmd(void) {
 	uint8_t v_temp = 0;
 	v_debugcount = 0;
 
-	f_uart_new_line();
+	f_uart_new_line_priv();
 	
-	while((v_temp < c_DEBUG_AVAILCMD) && (pgm_read_byte(&lut_dbgcmd[v_temp]) != buf_debugentry[0])) {
+	while((v_temp < c_DEBUG_AVAILCMD) &&
+	      (pgm_read_byte(&lut_dbgcmd[v_temp]) != buf_debugentry[0]))
+	{
 		++v_temp;
 	}
 	
@@ -250,51 +219,42 @@ void f_debug_process_cmd(void) {
 	}
 }
 
-void f_debug_port(unsigned char data) {
+static void f_debug_port(unsigned char data) {
 	char str[] = {"  "};
 
-	f_BinHex(data, str);
-	f_uart_put_str(str);
-	f_uart_new_line();
+	f_bin_to_hex(data, str);
+	f_uart_put_str_priv(str);
+	f_uart_new_line_priv();
 }
 
-void f_debug_port_v(unsigned char data) {
-	char str[] = {"   "};
-		
-	f_BinHex(data, str);
-	
-	f_uart_put_str(str);
-}
-
-void f_debug_readbyte(void) {
+static void f_debug_readbyte(void) {
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = (f_HexBin(p_str));
+	addr = (f_hex_to_bin(p_str));
 	v_data = * (unsigned char *) addr;
 	f_debug_port(v_data);
 }
 
-void f_debug_writebyte   (void)
-{
+static void f_debug_writebyte   (void) {
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = f_HexBin(p_str);
+	addr = f_hex_to_bin(p_str);
 	p_str = (char *) &buf_debugentry[2+4+1];
-	v_data = f_HexBinByte(p_str);
+	v_data = f_hex_byte_to_bin(p_str);
 
 	* (unsigned char *) addr = v_data;
 	/* readback */
 	v_data = * (unsigned char *) addr;
 	f_debug_port(v_data);
 }
-void f_debug_asctab      (void)
-{
+
+static void f_debug_asctab      (void) {
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str; 
@@ -302,7 +262,7 @@ void f_debug_asctab      (void)
 	unsigned char i;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = (f_HexBin(p_str));
+	addr = (f_hex_to_bin(p_str));
 
 	for(i=0; i<8 ;i++)
 	{
@@ -311,12 +271,12 @@ void f_debug_asctab      (void)
 		str[i] = v_data;
 	}
 
-	f_uart_put_str(str);
-	f_uart_new_line();
+	f_uart_put_str_priv(str);
+	f_uart_new_line_priv();
 
 }
-void f_debug_bintab(void)
-{
+
+static void f_debug_bintab(void) {
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str;
@@ -324,74 +284,70 @@ void f_debug_bintab(void)
 	unsigned char i;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = (f_HexBin(p_str));
+	addr = (f_hex_to_bin(p_str));
 	p_str = &str[0];
 
 	for(i=0; i<6 ;i++)
 	{
 		v_data = * (unsigned char *) addr;
 		addr++;
-		f_BinHex(v_data, p_str);
+		f_bin_to_hex(v_data, p_str);
 		p_str++;
 		p_str++;
 	}
 
-	f_uart_put_str(str);
-	f_uart_new_line();
+	f_uart_put_str_priv(str);
+	f_uart_new_line_priv();
 }
-
-void f_debug_pinA        (void)
-{
+ 
+ static void f_debug_pinA        (void) {
 	//unsigned char data;
 	//data = inp(PINA);
 	//f_debug_port(data);
 }
 
-void f_debug_pinB        (void)
-{
+static void f_debug_pinB        (void) {
 	unsigned char data;
 	data = inp(PINB);
 	f_debug_port(data);
 }
 
-void f_debug_pinC        (void)
-{
+static void f_debug_pinC        (void) {
 	unsigned char data;
 	data = inp(PINC);
 	f_debug_port(data);
 }
 
-void f_debug_pinD        (void)
-{
+static void f_debug_pinD        (void) {
 	unsigned char data;
 	data = inp(PIND);
 	f_debug_port(data);
 }
 
 
-void f_debug_rPROMbyte  (void) {
+static void f_debug_rPROMbyte  (void) {
 /*
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = (f_HexBin(p_str));
+	addr = (f_hex_to_bin(p_str));
 	v_data = f_EERead( addr);
 	f_debug_port(v_data);
 */
 }
 
-void f_debug_wPROMbyte (void) {
+static void f_debug_wPROMbyte (void) {
 /*
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = f_HexBin(p_str);
+	addr = f_hex_to_bin(p_str);
 	p_str = (char *) &buf_debugentry[2+4+1];
-	v_data = f_HexBinByte(p_str);
+	v_data = f_hex_byte_to_bin(p_str);
 
     f_EEWrite( addr, v_data);
 	
@@ -401,16 +357,15 @@ void f_debug_wPROMbyte (void) {
 */
 }
 
-void f_debug_wPORT(void)
-{
+static void f_debug_wPORT(void) {
 	unsigned char v_data;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = f_HexBinByte(p_str);
+	addr = f_hex_byte_to_bin(p_str);
 	p_str = (char *) &buf_debugentry[2+2+1];
-	v_data = f_HexBinByte(p_str);
+	v_data = f_hex_byte_to_bin(p_str);
 	
 	switch (addr)
 	{
@@ -446,14 +401,13 @@ void f_debug_wPORT(void)
 
 }
 
-void f_debug_rPORT(void)
-{
+static void f_debug_rPORT(void) {
 	unsigned char v_data = 0;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = f_HexBinByte(p_str);
+	addr = f_hex_byte_to_bin(p_str);
 	
 	switch (addr)
 	{
@@ -492,23 +446,23 @@ void f_debug_rPORT(void)
 }
 
 
-void f_debug_readADC(void) {
+static void f_debug_readADC(void) {
 /*
 	unsigned char v_data = 0;
 	unsigned short addr;
 	char *p_str;
 
 	p_str = (char *) &buf_debugentry[2];
-	addr = f_HexBinByte(p_str);
+	addr = f_hex_byte_to_bin(p_str);
 
 	if ( (addr < 0) || (addr > 7) )
 	{
-		f_uart_put_str("Bad Chan\r");	
+		f_uart_put_str_priv("Bad Chan\r");
 		return;
 	}
 	
 	v_data = (unsigned char) ( (v_Chan[addr] >> 8) & 0xff);
-	f_debug_port_v(v_data);
+	f_debug_port(v_data);
 	v_data = (unsigned char) (v_Chan[addr] & 0xff);
 	f_debug_port(v_data);
 
