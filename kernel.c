@@ -26,19 +26,13 @@ uint16_t v_sw_timer_ms[c_SYS_MAXSWTIMERS];
 uint8_t v_sw_timers;
 
 void (*fp_app_init_cb_arr[c_MAX_APPS])(void*);
-uint8_t v_app_init_cb_idx;
-
-/*
- * TODO: add framework for callbacks to run apps
- */
-typedef void(*fp_app_cb)(void*);
 
 void (*fp_app_cb_arr[c_MAX_APPS])(void*);
 
 /*
- * Replace index variables with bitmasks.
+ * TODO: Replace index variables with bitmasks.
  */
-uint8_t v_app_cb_idx;
+uint8_t v_app_init_cb_idx;
 
 /* Timer interrupt routine */
 //void SIG_OUTPUT_COMPARE1A( void ) {
@@ -124,18 +118,20 @@ uint16_t f_check_timer(uint8_t id)
   return v_sw_timer_ms[id];
 }
 
-boolean f_reg_app_init_cb(fp_app_init_cb hook) {
+boolean f_reg_app(fp_app_init_cb init_hook, fp_app_cb run_hook) {
   
-  if (hook == NULL) {
+  if ( (init_hook == NULL) || (run_hook == NULL) ) {
     return FALSE;
   }
-  
+
+  /* cannot register anymore callbacks */
   if (v_app_init_cb_idx == c_MAX_APPS) {
-    /* cannot register anymore callbacks */
     return FALSE;
   }
   
-  fp_app_init_cb_arr[v_app_init_cb_idx] = hook;
+  fp_app_init_cb_arr[v_app_init_cb_idx] = init_hook;
+  fp_app_cb_arr[v_app_init_cb_idx] = run_hook;
+
   v_app_init_cb_idx++;
   
   return TRUE;
@@ -208,7 +204,11 @@ void f_app_tick(void) {
 
 	if ((v_sys_state & bm_APP1TICK) != 0) {
 
-		f_run_app();
+		uint8_t i;
+		for (i = 0; i < v_app_init_cb_idx; i++)
+		{
+      (*fp_app_cb_arr[i])(NULL);
+		}			
     
 		CLR_REG(v_sys_state, bm_APP1TICK);
 	}
@@ -304,7 +304,7 @@ int main(void) {
 	
 	f_init_dbg(FALSE);
 
-  f_reg_app_init_cb(&f_init_app_led);
+  f_reg_app(&f_init_app_led, &f_run_app);
   f_reg_uart_cb(&f_app_uart_cb, 'c');
 	
 	f_init_apps();

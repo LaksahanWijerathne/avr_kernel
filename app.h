@@ -27,7 +27,7 @@ void f_init_app_led(void* data);
 
 void f_app_uart_cb(void* data);
 
-void f_run_app(void);
+void f_run_app(void* data);
 
 
 #endif /* APP_H_ */

@@ -47,6 +47,8 @@
  */
 typedef void(*fp_app_init_cb)(void*);
 
+typedef void(*fp_app_cb)(void*);
+
 //void SIG_OUTPUT_COMPARE1A( void ) __attribute__ ( ( signal ) );
 
 void f_init_systick_timer(unsigned short duration);
@@ -65,6 +67,6 @@ boolean f_clr_timer(uint8_t id);
 
 uint16_t f_check_timer(uint8_t id);
 
-boolean f_reg_app_init_cb(fp_app_init_cb hook);
+boolean f_reg_app(fp_app_init_cb hook, fp_app_cb run_hook);
 
 #endif /* KERNEL_H_ */

@@ -14,34 +14,36 @@ volatile app_state_t v_app_state;
 
 uint8_t v_app_timerid;
 
+void f_app_uart_cb(void* data) {
+	SET_REG(v_app_state, bm_APP_TRIGGER);
+}
+
 void f_init_app_led(void* data) {
-	ZERO_REG(v_app_state);
-	v_app_timerid = 0;
+
+  ZERO_REG(v_app_state);
+  v_app_timerid = 0;
   
   /* register sw timer for app */
   v_app_timerid = f_get_free_timer();
   if (v_app_timerid == 0xFF)
   {
-	  return;
+    return;
   }
+  
   SET_REG_BIT(v_app_state, e_APP_STATE_IDLE);
   v_app_state |= 0x01;
 	
-	return;
+  return;
 }  
 
-void f_app_uart_cb(void* data) {
-	SET_REG(v_app_state, bm_APP_TRIGGER);
-}
-
-void f_run_app(void) {
+void f_run_app(void* data) {
   
-	switch (v_app_state & bm_APP_STATE) {
+  switch (v_app_state & bm_APP_STATE) {
 
-		case (1 << e_APP_STATE_IDLE):
-		{
-		  if ( (v_app_state & bm_APP_TRIGGER) != 0 ) {
-			  /* set app state as ON */
+    case (1 << e_APP_STATE_IDLE):
+    {
+      if ( (v_app_state & bm_APP_TRIGGER) != 0 ) {
+        /* set app state as ON */
 			  CLR_REG_BIT(v_app_state, e_APP_STATE_IDLE);
 			  SET_REG_BIT(v_app_state, e_APP_STATE_ON);
 			  /* clear app trigger */
@@ -58,6 +60,7 @@ void f_run_app(void) {
 			break;
 		}    
 		case (1 << e_APP_STATE_ON):
+		{
 			if (f_check_timer(v_app_timerid) == 0) {
 
 				/* set app state as IDLE */
@@ -76,7 +79,7 @@ void f_run_app(void) {
 				sei();				
 			}
 			break;
-
+		}    
 		default:
 			;
 	}
